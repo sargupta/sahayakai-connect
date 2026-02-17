@@ -7,6 +7,11 @@ export interface TargetLead {
 
 export interface OutreachOutputs {
   researchSummary: string;
+  contactDetails?: {
+    email?: string;
+    linkedIn?: string;
+    twitter?: string;
+  };
   formalEmail: {
     subject: string;
     body: string;

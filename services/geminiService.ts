@@ -10,7 +10,8 @@ export const generateOutreach = async (query: string): Promise<OutreachOutputs> 
     Multi-Agent Intelligence Task:
     1. Research the following entity or topic extensively: "${query}".
     2. Focus on recent news from February 2026, participation in the IndiaAI Impact Summit (Feb 16-20, 2026), and connections to MeitY, NITI Aayog, or foundational education in India.
-    3. Construct a professional outreach strategy for Abhishek Gupta (SahayakAI) based on this intelligence.
+    3. SEARCH for and extract publicly available contact details (Email, LinkedIn, Twitter) for the individual or organization.
+    4. Construct a professional outreach strategy for Abhishek Gupta (SahayakAI) based on this intelligence.
     
     Current Date: February 21, 2026.
     
@@ -21,7 +22,7 @@ export const generateOutreach = async (query: string): Promise<OutreachOutputs> 
     model: 'gemini-3-pro-preview',
     contents: prompt,
     config: {
-      systemInstruction: SYSTEM_PROMPT + "\n\nCRITICAL: Use the googleSearch tool to find the most recent professional activity, quotes, and policy stances of the subject.",
+      systemInstruction: SYSTEM_PROMPT + "\n\nCRITICAL: Use the googleSearch tool to find the most recent professional activity, quotes, contact details, and policy stances of the subject.",
       tools: [{ googleSearch: {} }],
       responseMimeType: "application/json",
       responseSchema: {
@@ -31,11 +32,20 @@ export const generateOutreach = async (query: string): Promise<OutreachOutputs> 
             type: Type.STRING, 
             description: "A comprehensive summary of findings about the person/topic from various sources, emphasizing recent hooks." 
           },
+          contactDetails: {
+            type: Type.OBJECT,
+            properties: {
+                email: { type: Type.STRING, description: "Publicly available professional email address if found." },
+                linkedIn: { type: Type.STRING, description: "LinkedIn profile URL." },
+                twitter: { type: Type.STRING, description: "Twitter/X handle or URL." }
+            },
+            description: "Contact information for the target."
+          },
           formalEmail: {
             type: Type.OBJECT,
             properties: {
-              subject: { type: Type.STRING },
-              body: { type: Type.STRING }
+              subject: { type: Type.STRING, description: "A highly professional, concise, and value-driven email subject line. NO salesy language. Format: 'Topic: Context' or similar." },
+              body: { type: Type.STRING, description: "The main content of the email. STRICTLY PLAIN TEXT. Do not use Markdown formatting (no **bold**, no *italics*, no headers). Use natural paragraph breaks. Do not include the subject line here." }
             },
             required: ["subject", "body"]
           },

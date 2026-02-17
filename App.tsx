@@ -412,6 +412,35 @@ const App: React.FC = () => {
 
                     {activeTab === 'email' && (
                       <div className="space-y-6 animate-in fade-in zoom-in-95 duration-500">
+                        
+                        {outputs.contactDetails && (outputs.contactDetails.email || outputs.contactDetails.linkedIn || outputs.contactDetails.twitter) && (
+                            <div className="flex flex-wrap gap-3 mb-2 animate-in slide-in-from-top-4 duration-500">
+                                {outputs.contactDetails.email && (
+                                    <div className="flex items-center px-4 py-2 bg-indigo-50 text-indigo-700 rounded-xl border border-indigo-100">
+                                        <i className="fa-solid fa-envelope mr-2"></i>
+                                        <span className="text-xs font-bold select-all">{outputs.contactDetails.email}</span>
+                                        <button onClick={() => copyToClipboard(outputs.contactDetails!.email!, 'contact-email')} className="ml-2 text-indigo-400 hover:text-indigo-600 transition-colors">
+                                            {copyFeedback === 'contact-email' ? <i className="fa-solid fa-check text-emerald-500"></i> : <i className="fa-solid fa-copy"></i>}
+                                        </button>
+                                    </div>
+                                )}
+                                {outputs.contactDetails.linkedIn && (
+                                    <a href={outputs.contactDetails.linkedIn} target="_blank" rel="noopener noreferrer" className="flex items-center px-4 py-2 bg-blue-50 text-blue-700 rounded-xl border border-blue-100 hover:bg-blue-100 transition-colors">
+                                        <i className="fa-brands fa-linkedin mr-2"></i>
+                                        <span className="text-xs font-bold">LinkedIn Profile</span>
+                                        <i className="fa-solid fa-arrow-up-right-from-square ml-2 text-[10px]"></i>
+                                    </a>
+                                )}
+                                {outputs.contactDetails.twitter && (
+                                     <a href={outputs.contactDetails.twitter} target="_blank" rel="noopener noreferrer" className="flex items-center px-4 py-2 bg-slate-50 text-slate-700 rounded-xl border border-slate-200 hover:bg-slate-100 transition-colors">
+                                        <i className="fa-brands fa-x-twitter mr-2"></i>
+                                        <span className="text-xs font-bold">Twitter</span>
+                                        <i className="fa-solid fa-arrow-up-right-from-square ml-2 text-[10px]"></i>
+                                    </a>
+                                )}
+                            </div>
+                        )}
+
                         <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200 group relative focus-within:ring-2 focus-within:ring-indigo-200 transition-shadow">
                           <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Refined Subject</label>
                           <input
