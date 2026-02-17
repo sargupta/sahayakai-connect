@@ -57,3 +57,27 @@ export const generateOutreach = async (query: string): Promise<OutreachOutputs> 
 
   return result as OutreachOutputs;
 };
+
+export const transcribeAudio = async (audioBase64: string, mimeType: string): Promise<string> => {
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  
+  // Using gemini-2.0-flash for high-accuracy multilingual transcription as the preview model was unavailable
+  const response = await ai.models.generateContent({
+    model: 'gemini-2.0-flash',
+    contents: {
+      parts: [
+        {
+          inlineData: {
+            mimeType: mimeType,
+            data: audioBase64
+          }
+        },
+        {
+          text: "Transcribe the following audio query accurately. It is a professional search query which may contain Indian names, government organizations (like NITI Aayog, MeitY), technical terms, or mixed Hindi/English. Return ONLY the text of the query, no other commentary."
+        }
+      ]
+    }
+  });
+
+  return response.text || "";
+};

@@ -1,18 +1,10 @@
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { TargetLead, OutreachOutputs, GenerationStatus } from './types';
-import { generateOutreach } from './services/geminiService';
+import { generateOutreach, transcribeAudio } from './services/geminiService';
 import { Card } from './components/Card';
 import { Button } from './components/Button';
 import { marked } from 'marked';
-
-// Add type definition for Web Speech API
-declare global {
-  interface Window {
-    webkitSpeechRecognition: any;
-    SpeechRecognition: any;
-  }
-}
 
 const App: React.FC = () => {
   const [query, setQuery] = useState<string>('');
@@ -23,8 +15,10 @@ const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'brief' | 'email' | 'social' | 'pitch'>('brief');
   
   // Audio Input State
-  const [isListening, setIsListening] = useState(false);
-  const recognitionRef = useRef<any>(null);
+  const [isRecording, setIsRecording] = useState(false);
+  const [isProcessingAudio, setIsProcessingAudio] = useState(false);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
 
   // Copy Feedback State
   const [copyFeedback, setCopyFeedback] = useState<string | null>(null);
@@ -33,10 +27,10 @@ const App: React.FC = () => {
     const stored = localStorage.getItem('sahayak_leads_v2');
     if (stored) setSavedLeads(JSON.parse(stored));
     
-    // Cleanup speech recognition on unmount
+    // Cleanup
     return () => {
-      if (recognitionRef.current) {
-        recognitionRef.current.stop();
+      if (mediaRecorderRef.current && isRecording) {
+        mediaRecorderRef.current.stop();
       }
     };
   }, []);
@@ -116,72 +110,79 @@ const App: React.FC = () => {
     setStatus(GenerationStatus.IDLE);
   };
 
-  const toggleListening = () => {
-    if (isListening) {
-      if (recognitionRef.current) {
-        recognitionRef.current.stop();
-        setIsListening(false);
-      }
-    } else {
-      if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
-        setError("Voice input is not supported in this browser. Please use Chrome or Edge.");
-        return;
-      }
+  // --- Audio Recording Logic ---
 
-      try {
-        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-        const recognition = new SpeechRecognition();
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mediaRecorder = new MediaRecorder(stream);
+      mediaRecorderRef.current = mediaRecorder;
+      audioChunksRef.current = [];
+
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          audioChunksRef.current.push(event.data);
+        }
+      };
+
+      mediaRecorder.onstop = async () => {
+        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+        await handleAudioProcessing(audioBlob);
         
-        // Configuration for robust dictation
-        recognition.continuous = true; 
-        recognition.interimResults = false; 
-        recognition.lang = 'en-US';
+        // Stop all tracks to release microphone
+        stream.getTracks().forEach(track => track.stop());
+      };
 
-        recognition.onstart = () => {
-          setIsListening(true);
-          setError(null);
-        };
-
-        recognition.onend = () => {
-          setIsListening(false);
-        };
-
-        recognition.onresult = (event: any) => {
-          let newContent = '';
-          for (let i = event.resultIndex; i < event.results.length; ++i) {
-            if (event.results[i].isFinal) {
-              newContent += event.results[i][0].transcript + ' ';
-            }
-          }
-          
-          if (newContent) {
-            setQuery(prev => (prev || '') + newContent);
-          }
-        };
-
-        recognition.onerror = (event: any) => {
-          console.error("Speech recognition error", event.error);
-          if (event.error === 'not-allowed') {
-            setError("Microphone access denied. Please allow microphone permissions.");
-            setIsListening(false);
-          } else if (event.error === 'no-speech') {
-             // Silence detected, do nothing, let it potentially timeout naturally or wait
-          } else {
-            // Only stop for fatal errors
-            if (event.error !== 'aborted') {
-               setIsListening(false);
-            }
-          }
-        };
-
-        recognitionRef.current = recognition;
-        recognition.start();
-      } catch (e) {
-        console.error("Speech Recognition initialization failed", e);
-        setError("Failed to initialize voice input.");
-      }
+      mediaRecorder.start();
+      setIsRecording(true);
+      setError(null);
+    } catch (err) {
+      console.error("Microphone access failed", err);
+      setError("Microphone access denied or not available. Please check permissions.");
     }
   };
+
+  const stopRecording = () => {
+    if (mediaRecorderRef.current && isRecording) {
+      mediaRecorderRef.current.stop();
+      setIsRecording(false);
+    }
+  };
+
+  const toggleMic = () => {
+    if (isRecording) {
+      stopRecording();
+    } else {
+      startRecording();
+    }
+  };
+
+  const handleAudioProcessing = async (blob: Blob) => {
+    setIsProcessingAudio(true);
+    try {
+      const reader = new FileReader();
+      reader.readAsDataURL(blob);
+      reader.onloadend = async () => {
+        const base64data = reader.result as string;
+        // Remove data:audio/webm;base64, prefix
+        const base64Content = base64data.split(',')[1];
+        const mimeType = base64data.split(',')[0].match(/:(.*?);/)?.[1] || 'audio/webm';
+        
+        const text = await transcribeAudio(base64Content, mimeType);
+        if (text) {
+          // Append to existing query or set as new
+          setQuery(prev => (prev ? prev + ' ' + text.trim() : text.trim()));
+        }
+        setIsProcessingAudio(false);
+      };
+    } catch (err) {
+      console.error("Transcription failed", err);
+      setError("Failed to process audio. Please try again.");
+      setIsProcessingAudio(false);
+    }
+  };
+
+  // --- End Audio Logic ---
 
   // Helper to render Markdown safely
   const renderedBriefing = useMemo(() => {
@@ -256,10 +257,16 @@ const App: React.FC = () => {
                    </div>
                    <h2 className="text-sm font-black text-slate-900 uppercase tracking-widest">Command Center</h2>
                  </div>
-                 {isListening && (
+                 {isRecording && (
                    <div className="flex items-center text-rose-500 animate-pulse">
                      <i className="fa-solid fa-circle text-[10px] mr-2"></i>
-                     <span className="text-xs font-bold uppercase tracking-widest">Listening</span>
+                     <span className="text-xs font-bold uppercase tracking-widest">Recording Audio...</span>
+                   </div>
+                 )}
+                 {isProcessingAudio && (
+                   <div className="flex items-center text-indigo-500 animate-pulse">
+                     <i className="fa-solid fa-circle-notch fa-spin text-xs mr-2"></i>
+                     <span className="text-xs font-bold uppercase tracking-widest">Transcribing...</span>
                    </div>
                  )}
               </div>
@@ -279,11 +286,22 @@ const App: React.FC = () => {
                   }}
                 />
                 <button 
-                  onClick={toggleListening}
-                  className={`flex-shrink-0 w-12 h-12 rounded-full flex items-center justify-center transition-all ${isListening ? 'bg-rose-500 text-white shadow-lg shadow-rose-200 animate-pulse' : 'bg-slate-100 text-slate-400 hover:bg-indigo-50 hover:text-indigo-600'}`}
-                  title={isListening ? "Stop Listening" : "Start Voice Input"}
+                  onClick={toggleMic}
+                  disabled={isProcessingAudio}
+                  className={`flex-shrink-0 w-12 h-12 rounded-full flex items-center justify-center transition-all ${
+                    isRecording 
+                      ? 'bg-rose-500 text-white shadow-lg shadow-rose-200 animate-pulse scale-110' 
+                      : isProcessingAudio 
+                        ? 'bg-slate-100 text-slate-300 cursor-not-allowed'
+                        : 'bg-slate-100 text-slate-400 hover:bg-indigo-50 hover:text-indigo-600'
+                  }`}
+                  title={isRecording ? "Stop Recording" : "Start Voice Input"}
                 >
-                  <i className={`fa-solid ${isListening ? 'fa-microphone-lines' : 'fa-microphone'}`}></i>
+                  {isProcessingAudio ? (
+                    <i className="fa-solid fa-spinner fa-spin"></i>
+                  ) : (
+                    <i className={`fa-solid ${isRecording ? 'fa-stop' : 'fa-microphone'}`}></i>
+                  )}
                 </button>
               </div>
 
@@ -304,6 +322,7 @@ const App: React.FC = () => {
                     className="rounded-2xl shadow-xl shadow-slate-900/10 min-w-[220px]"
                     onClick={handleGenerate}
                     isLoading={status === GenerationStatus.LOADING}
+                    disabled={isRecording || isProcessingAudio}
                   >
                     Initiate Research
                   </Button>
