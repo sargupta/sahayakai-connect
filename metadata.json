@@ -1,0 +1,7 @@
+{
+  "name": "Sahayak-Connect Orchestrator",
+  "description": "A high-stakes strategic outreach engine for SahayakAI, designed to generate hyper-personalized pitches for government stakeholders and institutional partners using the 'Society of Agents' framework.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
